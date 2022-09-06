@@ -25,7 +25,7 @@ class TelegramBot(object):
             entry_points=[CommandHandler('start', self.start)],
             states={
                 CATEGORY: [MessageHandler(Filters.regex("^(דירה)$"), self.category), MessageHandler(Filters.regex("^(רכב)$"), self.endconv)],
-                ADULTS: [MessageHandler(Filters.regex("^(חופים|נופים|אגם|סקי|הכל)$"), self.adults)],
+                ADULTS: [MessageHandler(Filters.regex("^(הכל|נופים|חופים|אגם|סקי)$"), self.adults)],
                 CHILDREN: [MessageHandler(Filters.regex("^(1|2|3|4|5|6)$"), self.children)],
                 COUNTRY: [MessageHandler(Filters.regex("^(0|1|2|3|4|5|6)$"), self.country), CallbackQueryHandler(self.button, pass_user_data=True), CommandHandler('Approve', self.max_price)],
                 START_DATE: [MessageHandler(Filters.text, self.start_date), CallbackQueryHandler(self.inline_handler)],
@@ -62,7 +62,13 @@ class TelegramBot(object):
 
     def category(self,update, context: CallbackContext):
         user_cache[update.message.from_user.id]["api_type"] = update.message.text
-        reply_keyboard = [["הכל","סקי","אגם","נופים","חופים"]]
+        #reply_keyboard = [["הכל","סקי","אגם","נופים","חופים"]]
+        key=[]
+        categories = self.db.execute("select category_hebrew from rent_bot.airbnb_category;")
+        for i in categories:
+            key.append(i[0])
+        print(key)
+        reply_keyboard = [key]
         update.message.reply_text(
             "כדי להכיר אותך אשמח לדעת מה הסגנון המועדף עליך?",
             reply_markup=ReplyKeyboardMarkup(
@@ -171,7 +177,7 @@ class TelegramBot(object):
             user_cache[update.message.from_user.id]["enddate"] = enddate
             reply_keyboard = [["2000", "5000", "8000", "10000", "יותר"]]
             update.message.reply_text(
-                "מה המחיר המקסימלי שתהיו מוכנים לשלם?",
+                "מה המחיר המקסימלי (בשקלים) שתהיו מוכנים לשלם?",
                 reply_markup=ReplyKeyboardMarkup(
                     reply_keyboard, one_time_keyboard=True, input_field_placeholder="הכנס מחיר"
                 ),
@@ -194,8 +200,9 @@ class TelegramBot(object):
             user_cache[update.message.from_user.id]["price"] = price
         print(user_cache[update.message.from_user.id])
         update.message.reply_text(
-            "מצאנו לך כמה יעדים: "
+            "מחפש לך את הדירה... \U0001F50E"	
             "\n (נא המתן מספר שניות)"
+            "\n."
             , reply_markup=ReplyKeyboardRemove()
         )
         if user_cache[update.message.from_user.id]["category"]=="Beach":
@@ -221,10 +228,16 @@ class TelegramBot(object):
                 "select main_city from rent_bot.countries where country_name='%s'" %user_cache[update.message.from_user.id]["country"])
             countryq = user_cache[update.message.from_user.id]["country"]
         link="https://he.airbnb.com/"
-        airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token="TOKEN")
+
+        airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token="fa8cff67a0mshe9948d6063463b0p1ff194jsn31a255f19176")
         dec=airbnb.get(name="searchDestination", params={"query":cityq[0][0],"country":countryq})
         print(dec['data'][0]['id'])
+        print(dec)
         time.sleep(3)
+        if cityq[0][0] == "Athens":
+             id_city=dec['data'][1]['id']
+        else:
+            id_city=dec['data'][0]['id']
         a = airbnb.get(name="searchPropertyByPlace",
                        params={"id": dec['data'][0]['id'], "totalRecords": "3", "currency":"USD",
                                "adults": user_cache[update.message.from_user.id]["adults"],
@@ -237,56 +250,64 @@ class TelegramBot(object):
         #pri =[i['price'] for i in a['data']]
         # ls = [i['listingName']for i in a['data']]
         # rv= [i['avgRatingLocalized'] for i in a['data']]
-        result = []
-        for i in a['data']:
-            if 'id' in i:
-                result.append(f"{link}rooms/{i['id']}")
-            else:
-                result.append("אין קישור")
-
-        pri=[]
-        for i in a['data']:
-            if 'accessibilityLabel' in i:
-                pri.append(i['accessibilityLabel'])
-            else:
-                if 'price' in i:
-                    pri.append(i['price'])
-                else:
-                    pri.append("לא מוצג מחיר")
-        ls=[]
-        for i in a['data']:
-            if 'listingName' in i:
-                ls.append(i['listingName'])
-            else:
-               ls.append("לא מוצג שם")
-
-
-        rv=[]
-        for i in a['data']:
-
-            if 'avgRatingLocalized' in i:
-                if i['avgRatingLocalized']=="New":
-                    rv.append("לא קיים דירוג")
-                else:
-                    rv.append(i['avgRatingLocalized'])
-            else:
-               rv.append("לא קיים דירוג")
-        print(result)
-        print(pri)
-        print(ls)
-        print(rv)
-        for i in range(3):
+        if a['message'] !="Success":
             update.message.reply_text(
-               f" שם: {ls[i]} "
-               f"\n מחיר: {pri[i]}"
-               f"\n דירוג: {rv[i]}"
-               f"\n קישור: {result[i]}"
-                "\n. ",
-                reply_markup=ReplyKeyboardRemove()
+                "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
             )
-        update.message.reply_text(
-            "ביי, שתהיה לכם חופשה מהנה! \U00002708", reply_markup=ReplyKeyboardRemove()
-        )
+        else:
+            update.message.reply_text(
+                "מצאתי לך מספר יעדים:", reply_markup=ReplyKeyboardRemove()
+            )
+            result = []
+            for i in a['data']:
+                if 'id' in i:
+                    result.append(f"{link}rooms/{i['id']}")
+                else:
+                    result.append("אין קישור")
+
+            pri=[]
+            for i in a['data']:
+                if 'accessibilityLabel' in i:
+                    pri.append(i['accessibilityLabel'])
+                else:
+                    if 'price' in i:
+                        pri.append(i['price'])
+                    else:
+                        pri.append("לא מוצג מחיר")
+            ls=[]
+            for i in a['data']:
+                if 'listingName' in i:
+                    ls.append(i['listingName'])
+                else:
+                   ls.append("לא מוצג שם")
+
+
+            rv=[]
+            for i in a['data']:
+
+                if 'avgRatingLocalized' in i:
+                    if i['avgRatingLocalized']=="New":
+                        rv.append("לא קיים דירוג")
+                    else:
+                        rv.append(i['avgRatingLocalized'])
+                else:
+                   rv.append("לא קיים דירוג")
+            print(result)
+            print(pri)
+            print(ls)
+            print(rv)
+            for i in range(3):
+                update.message.reply_text(
+                   f" שם: {ls[i]} "
+                   f"\n מחיר: {pri[i]}"
+                   f"\n דירוג: {rv[i]}"
+                   f"\n קישור: {result[i]}"
+                    "\n. ",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            update.message.reply_text(
+                "ביי, שתהיה לכם חופשה מהנה! \U00002708", reply_markup=ReplyKeyboardRemove()
+            )
 
         return ConversationHandler.END
 
