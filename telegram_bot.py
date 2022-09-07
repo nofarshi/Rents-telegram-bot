@@ -9,7 +9,7 @@ import time
 
 user_cache = {}
 
-CATEGORY, ENDCONV, ADULTS, CHILDREN, COUNTRY, START_DATE, END_DATE, MAX_PRICE, PROPERTY, FIND_A, DAYS = range(11)
+CATEGORY, ENDCONV, ADULTS, CHILDREN, COUNTRY, START_DATE, END_DATE, MAX_PRICE, FIND_A, DAYS, DROP, CITY_PICK, START_DATE2, DAYS2, CITY_PICK2 = range(15)
 
 
 
@@ -24,15 +24,20 @@ class TelegramBot(object):
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start)],
             states={
-                CATEGORY: [MessageHandler(Filters.regex("^(דירה)$"), self.category), MessageHandler(Filters.regex("^(רכב)$"), self.endconv)],
+                CATEGORY: [MessageHandler(Filters.regex("^(דירה)$"), self.category), MessageHandler(Filters.regex("^(רכב)$"), self.same_dropoff)],
                 ADULTS: [MessageHandler(Filters.regex("^(הכל|נופים|חופים|אגם|סקי)$"), self.adults)],
                 CHILDREN: [MessageHandler(Filters.regex("^(1|2|3|4|5|6)$"), self.children)],
-                COUNTRY: [MessageHandler(Filters.regex("^(0|1|2|3|4|5|6)$"), self.country), CallbackQueryHandler(self.button, pass_user_data=True), CommandHandler('Approve', self.max_price)],
+                COUNTRY: [MessageHandler(Filters.regex("^(0|1|2|3|4|5|6)$"), self.country), CallbackQueryHandler(self.button, pass_user_data=True), CommandHandler('Approve', self.start_date)],
                 START_DATE: [MessageHandler(Filters.text, self.start_date), CallbackQueryHandler(self.inline_handler)],
                 DAYS: [CommandHandler('Approve', self.days), CommandHandler('TryAgain', self.start_date)],
                 MAX_PRICE: [MessageHandler(Filters.text, self.max_price)],
-                FIND_A: [CommandHandler('TryAgain', self.days), MessageHandler(Filters.regex("^(2000|5000|8000|10000|יותר)$"), self.find_apartment)]
-
+                FIND_A: [CommandHandler('TryAgain', self.days), MessageHandler(Filters.regex("^(2000|5000|8000|10000|יותר)$"), self.find_apartment)],
+                DROP: [MessageHandler(Filters.regex("^(אותה נקודה)$"), self.des_country),  MessageHandler(Filters.regex("^(אחרת)$"), self.des_country), CallbackQueryHandler(self.country_query, pass_user_data=True), CommandHandler('Approve', self.city_pick)],
+                CITY_PICK:[MessageHandler(Filters.text, self.city_pick), CallbackQueryHandler(self.city_query, pass_user_data=True), CommandHandler('Approve', self.start_date2)],
+                CITY_PICK2:[MessageHandler(Filters.text, self.city_pick2), CallbackQueryHandler(self.city_query2, pass_user_data=True), CommandHandler('Approve', self.start_date2)],
+                START_DATE2: [CommandHandler('Approve',  self.start_date2), CallbackQueryHandler(self.inline_handler2)],
+                DAYS2: [CommandHandler('Approve', self.days2), CommandHandler('TryAgain', self.start_date2)],
+                ENDCONV:[MessageHandler(Filters.text, self.endconv)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
         )
@@ -123,8 +128,6 @@ class TelegramBot(object):
 
     def button(self, update, context: CallbackContext):
         """Parses the CallbackQuery and updates the message text."""
-
-
         query = update.callback_query
         global country
         # CallbackQueries need to be answered, even if no notification to the user is needed
@@ -139,7 +142,6 @@ class TelegramBot(object):
         user_cache[update.message.from_user.id]["country"] = en_country[0][0]
         update.message.reply_text(text='הכנס את תאריך ההגעה:',
                                   reply_markup=telegramcalendar.create_calendar())
-
 
 
     def inline_handler(self, update, context: CallbackContext):
@@ -229,7 +231,7 @@ class TelegramBot(object):
             countryq = user_cache[update.message.from_user.id]["country"]
         link="https://he.airbnb.com/"
 
-        airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token="fa8cff67a0mshe9948d6063463b0p1ff194jsn31a255f19176")
+        airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token="TOKEN")
         dec=airbnb.get(name="searchDestination", params={"query":cityq[0][0],"country":countryq})
         print(dec['data'][0]['id'])
         print(dec)
@@ -311,19 +313,160 @@ class TelegramBot(object):
 
         return ConversationHandler.END
 
-    def endconv(self,update, context: CallbackContext):
+
+
+    def same_dropoff(self,update, context: CallbackContext):
+        """Send a message when the command /start is issued."""
+        reply_keyboard = [["אחרת", "אותה נקודה"]]
+        update.message.reply_text( "האם תרצו לאסוף ולהחזיר את הרכב מאותה נקודה או אחרת?",
+            reply_markup=ReplyKeyboardMarkup(
+                reply_keyboard, one_time_keyboard=True, input_field_placeholder="נקודת איסוף?"
+            ),
+         )
+        return DROP
+
+    def des_country(self, update, context: CallbackContext):
+        user_cache[update.message.from_user.id]["api_type"] = update.message.text
+        update.message.reply_text(
+            "\U0001F973",
+            reply_markup=ReplyKeyboardRemove())
+        keyboard = []
+        countries = self.db.execute("select country_name_hebrew from rent_bot.countries;")
+        for i, country in enumerate(countries):
+            keyboard.insert(i, [InlineKeyboardButton(country[0], callback_data=i)])
+
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        update.message.reply_text("באיזה מדינה תרצה לשהות?", reply_markup=reply_markup)
+
+
+    def country_query(self, update, context: CallbackContext):
+        """Parses the CallbackQuery and updates the message text."""
+        query = update.callback_query
+        global country_pick
+        # CallbackQueries need to be answered, even if no notification to the user is needed
+        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        query.answer()
+        country_pick=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
+        query.edit_message_text(text= "המדינה שבחרת היא: " +country_pick+" לחץ על /Approve כדי להמשיך")
+        return CITY_PICK
+
+    def city_pick(self, update, context: CallbackContext):
+        en_country = self.db.execute(
+            "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
+        user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
+        global choise
+        choise=user_cache[update.message.from_user.id]["api_type"]
+        keyboard = []
+        cities = self.db.execute(
+            "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
+            en_country[0][0])
+        for i, city in enumerate(cities[0]):
+            keyboard.insert(i, [InlineKeyboardButton(city, callback_data=i)])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        update.message.reply_text("מאיזה עיר תרצה להשכיר רכב?", reply_markup=reply_markup)
+
+    def city_query(self, update, context: CallbackContext):
+        """Parses the CallbackQuery and updates the message text."""
+        query = update.callback_query
+        global city_pick
+        # CallbackQueries need to be answered, even if no notification to the user is needed
+        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        query.answer()
+        city_pick=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
+        query.edit_message_text(text= "העיר שבחרת היא: " +city_pick+" לחץ על /Approve כדי להמשיך")
+
+        if choise=="אותה נקודה":
+            return START_DATE2
+        else:
+            return CITY_PICK2
+
+    def city_pick2(self, update, context: CallbackContext):
+        en_country = self.db.execute(
+            "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
+        user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
+
+        keyboard = []
+        cities = self.db.execute(
+            "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
+            en_country[0][0])
+        for i, city in enumerate(cities[0]):
+            keyboard.insert(i, [InlineKeyboardButton(city, callback_data=i)])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        update.message.reply_text("מאיזה עיר תרצה להשכיר רכב?", reply_markup=reply_markup)
+
+    def city_query2(self, update, context: CallbackContext):
+        """Parses the CallbackQuery and updates the message text."""
+        query = update.callback_query
+        global city_pick2
+        # CallbackQueries need to be answered, even if no notification to the user is needed
+        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        query.answer()
+        city_pick=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
+        query.edit_message_text(text= "העיר שבחרת היא: " +city_pick+" לחץ על /Approve כדי להמשיך")
+        return START_DATE2
+
+    def start_date2(self, update, context: CallbackContext):
+        # en_cities = self.db.execute(
+        #     "select city1_en,city2_en,city3_en, city4_en from rent_bot.cities_cars where country_name='%s''" % city_pick)
+        # user_cache[update.message.from_user.id]["country"] = en_cities[0][0]
+        s1=self.db.execute("select city1_en,city2_en,city3_en, city4_en from rent_bot.cities_cars where country_name='%s'" %user_cache[update.message.from_user.id]["country_pick"])
+        s2=self.db.execute("select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %user_cache[update.message.from_user.id]["country_pick"])
+        print(s1[0])
+        print(s2[0])
+        city_en=""
+        for i, city in enumerate(s2[0]):
+            if city== city_pick:
+                city_en=s1[0][i]
+        user_cache[update.message.from_user.id]["city_drop"] = city_en
+        update.message.reply_text(text='הכנס את תאריך ההגעה:',
+                                  reply_markup=telegramcalendar.create_calendar())
+
+    def inline_handler2(self, update, context: CallbackContext):
+        global sdate
+        query = update.callback_query
+        (kind, _, _, _, _) = query.data.split(";")
+        selected, date = telegramcalendar.process_calendar_selection(update, context)
+        if not selected:
+            return START_DATE2
+        else:
+            if date < datetime.datetime.now():
+                context.bot.send_message(chat_id=update.callback_query.from_user.id,
+                                         text="התאריך שהזנת עבר לחץ על /TryAgain כדי להזין שוב",
+                                         reply_markup=ReplyKeyboardRemove())
+                return START_DATE2
+            startdate = date.strftime("%d-%m-%Y")
+            sdate = date.strftime("%Y-%m-%d")
+            context.bot.send_message(chat_id=update.callback_query.from_user.id,
+                                     text="התאריך שהזנת הוא " + (startdate) + " לחץ על /Approve כדי להמשיך",
+                                     reply_markup=ReplyKeyboardRemove())
+            return DAYS2
+
+    def days2(self, update, context: CallbackContext):
+        user_cache[update.message.from_user.id]["startdate"] = sdate
+        update.message.reply_text(
+            'כמה ימים תרצו להשכיר את הדירה? (ספרות בלבד)', reply_markup=ReplyKeyboardRemove()
+        )
+        return ENDCONV
+
+    def endconv(self, update, context: CallbackContext):
         update.message.reply_text(
             "ביי, שתהיה לכם חופשה מהנה! ", reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
 
-    def cancel(self,update, context):
-            """Cancels and ends the conversation."""
+    def cancel(self, update, context):
+        """Cancels and ends the conversation."""
 
-            update.message.reply_text(
-                "ביי, שתהיה לכם חופשה מהנה!", reply_markup=ReplyKeyboardRemove()
-            )
-            return ConversationHandler.END
+        update.message.reply_text(
+            "ביי, שתהיה לכם חופשה מהנה!", reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
 
 
 
