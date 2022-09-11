@@ -1,4 +1,5 @@
 import datetime
+from db_manager import DbManager
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ContextTypes, ConversationHandler, filters, CallbackContext, CallbackQueryHandler
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, ParseMode, bot, InlineKeyboardButton, InlineKeyboardMarkup
 from currency_converter import CurrencyConverter
@@ -9,9 +10,7 @@ import time
 
 user_cache = {}
 
-CATEGORY, ENDCONV, ADULTS, CHILDREN, COUNTRY, START_DATE, END_DATE, MAX_PRICE, FIND_A, DAYS, DROP, CITY_PICK, START_DATE2, DAYS2, CITY_PICK2 = range(15)
-
-
+CATEGORY, FIND_CAR, ADULTS, CHILDREN, COUNTRY, START_DATE, END_DATE, MAX_PRICE, FIND_A, DAYS, DROP, CITY_PICK, START_DATE2, DAYS2, CITY_DROP = range(15)
 
 class TelegramBot(object):
     def __init__(self, token, db):
@@ -25,6 +24,7 @@ class TelegramBot(object):
             entry_points=[CommandHandler('start', self.start)],
             states={
                 CATEGORY: [MessageHandler(Filters.regex("^(דירה)$"), self.category), MessageHandler(Filters.regex("^(רכב)$"), self.same_dropoff)],
+                #Apartment process
                 ADULTS: [MessageHandler(Filters.regex("^(הכל|נופים|חופים|אגם|סקי)$"), self.adults)],
                 CHILDREN: [MessageHandler(Filters.regex("^(1|2|3|4|5|6)$"), self.children)],
                 COUNTRY: [MessageHandler(Filters.regex("^(0|1|2|3|4|5|6)$"), self.country), CallbackQueryHandler(self.button, pass_user_data=True), CommandHandler('Approve', self.start_date)],
@@ -32,12 +32,13 @@ class TelegramBot(object):
                 DAYS: [CommandHandler('Approve', self.days), CommandHandler('TryAgain', self.start_date)],
                 MAX_PRICE: [MessageHandler(Filters.text, self.max_price)],
                 FIND_A: [CommandHandler('TryAgain', self.days), MessageHandler(Filters.regex("^(2000|5000|8000|10000|יותר)$"), self.find_apartment)],
+                #Car process
                 DROP: [MessageHandler(Filters.regex("^(אותה נקודה)$"), self.des_country),  MessageHandler(Filters.regex("^(אחרת)$"), self.des_country), CallbackQueryHandler(self.country_query, pass_user_data=True), CommandHandler('Approve', self.city_pick)],
                 CITY_PICK:[MessageHandler(Filters.text, self.city_pick), CallbackQueryHandler(self.city_query, pass_user_data=True), CommandHandler('Approve', self.start_date2)],
-                CITY_PICK2:[MessageHandler(Filters.text, self.city_pick2), CallbackQueryHandler(self.city_query2, pass_user_data=True), CommandHandler('Approve', self.start_date2)],
-                START_DATE2: [CommandHandler('Approve',  self.start_date2), CallbackQueryHandler(self.inline_handler2)],
+                CITY_DROP:[MessageHandler(Filters.text, self.city_drop), CallbackQueryHandler(self.city_query2, pass_user_data=True), CommandHandler('Approve', self.start_date2)],
+                START_DATE2: [MessageHandler(Filters.text, self.start_date2), CallbackQueryHandler(self.inline_handler2)],
                 DAYS2: [CommandHandler('Approve', self.days2), CommandHandler('TryAgain', self.start_date2)],
-                ENDCONV:[MessageHandler(Filters.text, self.endconv)]
+                FIND_CAR:[CommandHandler('TryAgain', self.days2), MessageHandler(Filters.text, self.find_car)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
         )
@@ -64,10 +65,9 @@ class TelegramBot(object):
          )
         return CATEGORY
 
-
+    #Apartment process
     def category(self,update, context: CallbackContext):
         user_cache[update.message.from_user.id]["api_type"] = update.message.text
-        #reply_keyboard = [["הכל","סקי","אגם","נופים","חופים"]]
         key=[]
         categories = self.db.execute("select category_hebrew from rent_bot.airbnb_category;")
         for i in categories:
@@ -130,8 +130,6 @@ class TelegramBot(object):
         """Parses the CallbackQuery and updates the message text."""
         query = update.callback_query
         global country
-        # CallbackQueries need to be answered, even if no notification to the user is needed
-        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
         query.answer()
         country=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
         query.edit_message_text(text= "המדינה שבחרת היא: " +country+" לחץ על /Approve כדי להמשיך")
@@ -198,8 +196,8 @@ class TelegramBot(object):
             user_cache[update.message.from_user.id]["price"] = ""
 
         else:
-            price=int(c.convert(int(update.message.text), 'ILS', 'USD'))
-            user_cache[update.message.from_user.id]["price"] = price
+            price_conv=int(c.convert(int(update.message.text), 'ILS', 'USD'))
+            user_cache[update.message.from_user.id]["price"] = price_conv
         print(user_cache[update.message.from_user.id])
         update.message.reply_text(
             "מחפש לך את הדירה... \U0001F50E"	
@@ -233,30 +231,27 @@ class TelegramBot(object):
 
         airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token="TOKEN")
         dec=airbnb.get(name="searchDestination", params={"query":cityq[0][0],"country":countryq})
-        print(dec['data'][0]['id'])
-        print(dec)
-        time.sleep(3)
-        if cityq[0][0] == "Athens":
-             id_city=dec['data'][1]['id']
-        else:
-            id_city=dec['data'][0]['id']
-        a = airbnb.get(name="searchPropertyByPlace",
-                       params={"id": dec['data'][0]['id'], "totalRecords": "3", "currency":"USD",
-                               "adults": user_cache[update.message.from_user.id]["adults"],
-                               "children": user_cache[update.message.from_user.id]["children"],
-                               "checkin":user_cache[update.message.from_user.id]["startdate"],
-                               "checkout":user_cache[update.message.from_user.id]["enddate"],
-                               "priceMax": user_cache[update.message.from_user.id]["price"]})
-        print(a)
-        #result = [f"{link}rooms/{i['id']}" for i in a['data']]
-        #pri =[i['price'] for i in a['data']]
-        # ls = [i['listingName']for i in a['data']]
-        # rv= [i['avgRatingLocalized'] for i in a['data']]
-        if a['message'] !="Success":
+        if dec['message'] != "Success":
             update.message.reply_text(
                 "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
             )
+            update.message.reply_text(
+                dec['message'], reply_markup=ReplyKeyboardRemove()
+            )
+
         else:
+            time.sleep(3)
+            if cityq[0][0] == "Athens":
+                 id_city=dec['data'][1]['id']
+            else:
+                id_city=dec['data'][0]['id']
+            a = airbnb.get(name="searchPropertyByPlace",
+                           params={"id": dec['data'][0]['id'], "totalRecords": "3", "currency":"USD",
+                                   "adults": user_cache[update.message.from_user.id]["adults"],
+                                   "children": user_cache[update.message.from_user.id]["children"],
+                                   "checkin":user_cache[update.message.from_user.id]["startdate"],
+                                   "checkout":user_cache[update.message.from_user.id]["enddate"],
+                                   "priceMax": user_cache[update.message.from_user.id]["price"]})
             update.message.reply_text(
                 "מצאתי לך מספר יעדים:", reply_markup=ReplyKeyboardRemove()
             )
@@ -267,42 +262,38 @@ class TelegramBot(object):
                 else:
                     result.append("אין קישור")
 
-            pri=[]
+            price=[]
             for i in a['data']:
                 if 'accessibilityLabel' in i:
-                    pri.append(i['accessibilityLabel'])
+                    price.append(i['accessibilityLabel'])
                 else:
                     if 'price' in i:
-                        pri.append(i['price'])
+                        price.append(i['price'])
                     else:
-                        pri.append("לא מוצג מחיר")
-            ls=[]
+                        price.append("לא מוצג מחיר")
+            name=[]
             for i in a['data']:
                 if 'listingName' in i:
-                    ls.append(i['listingName'])
+                    name.append(i['listingName'])
                 else:
-                   ls.append("לא מוצג שם")
+                   name.append("לא מוצג שם")
 
 
-            rv=[]
+            rate=[]
             for i in a['data']:
 
                 if 'avgRatingLocalized' in i:
                     if i['avgRatingLocalized']=="New":
-                        rv.append("לא קיים דירוג")
+                        rate.append("לא קיים דירוג")
                     else:
-                        rv.append(i['avgRatingLocalized'])
+                        rate.append(i['avgRatingLocalized'])
                 else:
-                   rv.append("לא קיים דירוג")
-            print(result)
-            print(pri)
-            print(ls)
-            print(rv)
+                   rate.append("לא קיים דירוג")
             for i in range(3):
                 update.message.reply_text(
-                   f" שם: {ls[i]} "
-                   f"\n מחיר: {pri[i]}"
-                   f"\n דירוג: {rv[i]}"
+                   f" שם: {name[i]} "
+                   f"\n מחיר: {price[i]}"
+                   f"\n דירוג: {rate[i]}"
                    f"\n קישור: {result[i]}"
                     "\n. ",
                     reply_markup=ReplyKeyboardRemove()
@@ -313,8 +304,7 @@ class TelegramBot(object):
 
         return ConversationHandler.END
 
-
-
+    # Car process
     def same_dropoff(self,update, context: CallbackContext):
         """Send a message when the command /start is issued."""
         reply_keyboard = [["אחרת", "אותה נקודה"]]
@@ -331,33 +321,38 @@ class TelegramBot(object):
             "\U0001F973",
             reply_markup=ReplyKeyboardRemove())
         keyboard = []
-        countries = self.db.execute("select country_name_hebrew from rent_bot.countries;")
+        countries = self.db.execute("select country_name_hebrew from rent_bot.countries where country_name <>'Israel';")
         for i, country in enumerate(countries):
             keyboard.insert(i, [InlineKeyboardButton(country[0], callback_data=i)])
 
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        update.message.reply_text("באיזה מדינה תרצה לשהות?", reply_markup=reply_markup)
+        update.message.reply_text("מאיזה מדינה תרצה להשכיר רכב?", reply_markup=reply_markup)
 
 
     def country_query(self, update, context: CallbackContext):
         """Parses the CallbackQuery and updates the message text."""
         query = update.callback_query
         global country_pick
-        # CallbackQueries need to be answered, even if no notification to the user is needed
-        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
         query.answer()
         country_pick=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
         query.edit_message_text(text= "המדינה שבחרת היא: " +country_pick+" לחץ על /Approve כדי להמשיך")
         return CITY_PICK
 
     def city_pick(self, update, context: CallbackContext):
-        en_country = self.db.execute(
-            "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
-        user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
-        global choise
-        choise=user_cache[update.message.from_user.id]["api_type"]
+        global choice
+        try:
+            en_country = self.db.execute(
+                "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
+            user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
+            choice = user_cache[update.message.from_user.id]["api_type"]
+        except:
+            db = DbManager(user="root", password="1234", host="localhost", database="rent_bot")
+            en_country = self.db.execute(
+                "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
+            user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
+            choice = user_cache[update.message.from_user.id]["api_type"]
         keyboard = []
         cities = self.db.execute(
             "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
@@ -373,22 +368,28 @@ class TelegramBot(object):
         """Parses the CallbackQuery and updates the message text."""
         query = update.callback_query
         global city_pick
-        # CallbackQueries need to be answered, even if no notification to the user is needed
-        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
         query.answer()
         city_pick=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
         query.edit_message_text(text= "העיר שבחרת היא: " +city_pick+" לחץ על /Approve כדי להמשיך")
-
-        if choise=="אותה נקודה":
+        if choice=="אותה נקודה":
             return START_DATE2
         else:
-            return CITY_PICK2
+            return CITY_DROP
 
-    def city_pick2(self, update, context: CallbackContext):
+    def city_drop(self, update, context: CallbackContext):
         en_country = self.db.execute(
             "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
-        user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
-
+        s1 = self.db.execute(
+            "select city1_en,city2_en,city3_en, city4_en from rent_bot.cities_cars where country_name='%s'" %
+            user_cache[update.message.from_user.id]["country_pick"])
+        s2 = self.db.execute(
+            "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
+            user_cache[update.message.from_user.id]["country_pick"])
+        city_en = ""
+        for i, city in enumerate(s2[0]):
+            if city == city_pick:
+                city_en = s1[0][i]
+        user_cache[update.message.from_user.id]["city_pick"] = city_en
         keyboard = []
         cities = self.db.execute(
             "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
@@ -398,37 +399,48 @@ class TelegramBot(object):
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        update.message.reply_text("מאיזה עיר תרצה להשכיר רכב?", reply_markup=reply_markup)
+        update.message.reply_text("לאיזה עיר תרצה להחזיר את הרכב?", reply_markup=reply_markup)
 
     def city_query2(self, update, context: CallbackContext):
         """Parses the CallbackQuery and updates the message text."""
         query = update.callback_query
-        global city_pick2
-        # CallbackQueries need to be answered, even if no notification to the user is needed
-        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        global city_drop
         query.answer()
-        city_pick=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
-        query.edit_message_text(text= "העיר שבחרת היא: " +city_pick+" לחץ על /Approve כדי להמשיך")
+        city_drop=query.message.reply_markup.inline_keyboard[int(query.data)][0].text
+        query.edit_message_text(text= "העיר שבחרת היא: " +city_drop+" לחץ על /Approve כדי להמשיך")
         return START_DATE2
 
     def start_date2(self, update, context: CallbackContext):
-        # en_cities = self.db.execute(
-        #     "select city1_en,city2_en,city3_en, city4_en from rent_bot.cities_cars where country_name='%s''" % city_pick)
-        # user_cache[update.message.from_user.id]["country"] = en_cities[0][0]
-        s1=self.db.execute("select city1_en,city2_en,city3_en, city4_en from rent_bot.cities_cars where country_name='%s'" %user_cache[update.message.from_user.id]["country_pick"])
-        s2=self.db.execute("select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %user_cache[update.message.from_user.id]["country_pick"])
-        print(s1[0])
-        print(s2[0])
-        city_en=""
-        for i, city in enumerate(s2[0]):
-            if city== city_pick:
-                city_en=s1[0][i]
-        user_cache[update.message.from_user.id]["city_drop"] = city_en
+        if(user_cache[update.message.from_user.id]["api_type"]=="אחרת"):
+            s1=self.db.execute(
+                "select city1_en,city2_en,city3_en, city4_en from rent_bot.cities_cars where country_name='%s'" %
+                user_cache[update.message.from_user.id]["country_pick"])
+            s2=self.db.execute(
+                "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
+                user_cache[update.message.from_user.id]["country_pick"])
+            city_en=""
+            for i, city in enumerate(s2[0]):
+                if city== city_drop:
+                    city_en=s1[0][i]
+            user_cache[update.message.from_user.id]["city_drop"] = city_en
+        else:
+            s1 = self.db.execute(
+                "select city1_en,city2_en,city3_en, city4_en from rent_bot.cities_cars where country_name='%s'" %
+                user_cache[update.message.from_user.id]["country_pick"])
+            s2 = self.db.execute(
+                "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
+                user_cache[update.message.from_user.id]["country_pick"])
+            city_en = ""
+            for i, city in enumerate(s2[0]):
+                if city == city_pick:
+                    city_en = s1[0][i]
+            user_cache[update.message.from_user.id]["city_pick"] = city_en
+            user_cache[update.message.from_user.id]["city_drop"] = city_en
         update.message.reply_text(text='הכנס את תאריך ההגעה:',
                                   reply_markup=telegramcalendar.create_calendar())
 
     def inline_handler2(self, update, context: CallbackContext):
-        global sdate
+        global sdate2
         query = update.callback_query
         (kind, _, _, _, _) = query.data.split(";")
         selected, date = telegramcalendar.process_calendar_selection(update, context)
@@ -441,24 +453,119 @@ class TelegramBot(object):
                                          reply_markup=ReplyKeyboardRemove())
                 return START_DATE2
             startdate = date.strftime("%d-%m-%Y")
-            sdate = date.strftime("%Y-%m-%d")
+            sdate2 = date.strftime("%Y-%m-%d 09:00:00")
             context.bot.send_message(chat_id=update.callback_query.from_user.id,
                                      text="התאריך שהזנת הוא " + (startdate) + " לחץ על /Approve כדי להמשיך",
                                      reply_markup=ReplyKeyboardRemove())
             return DAYS2
 
     def days2(self, update, context: CallbackContext):
-        user_cache[update.message.from_user.id]["startdate"] = sdate
+        user_cache[update.message.from_user.id]["startdate_car"] = sdate2
         update.message.reply_text(
-            'כמה ימים תרצו להשכיר את הדירה? (ספרות בלבד)', reply_markup=ReplyKeyboardRemove()
+            'כמה ימים תרצו להשכיר את הרכב? (ספרות בלבד)', reply_markup=ReplyKeyboardRemove()
         )
-        return ENDCONV
+        return FIND_CAR
 
-    def endconv(self, update, context: CallbackContext):
-        update.message.reply_text(
-            "ביי, שתהיה לכם חופשה מהנה! ", reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
+    def find_car(self, update, context: CallbackContext):
+        if update.message.text.isnumeric():
+            date1 = datetime.datetime.strptime(sdate2, '%Y-%m-%d %H:%M:%S')
+            date2 = date1 + datetime.timedelta(days=int(update.message.text))
+            enddate2 = date2.strftime("%Y-%m-%d 20:00:00")
+            user_cache[update.message.from_user.id]["enddate_car"] = enddate2
+            booking = BookingApi(url="booking-com.p.rapidapi.com", token="TOKEN")
+            a1=booking.get(name="car-rental/locations", params={"name":user_cache[update.message.from_user.id]["city_pick"], "locale": "en-gb"})
+
+            user_cache[update.message.from_user.id]["longitude_pick"]=a1[0]['longitude']
+            user_cache[update.message.from_user.id]["latitude_pick"] = a1[0]['latitude']
+            if user_cache[update.message.from_user.id]["city_pick"]!= user_cache[update.message.from_user.id]["city_drop"]:
+                a2 = booking.get(name="car-rental/locations",
+                                 params={"name": user_cache[update.message.from_user.id]["city_drop"],
+                                         "locale": "en-gb"})
+                user_cache[update.message.from_user.id]["longitude_drop"] = a2[0]['longitude']
+                user_cache[update.message.from_user.id]["latitude_drop"] = a2[0]['latitude']
+            else:
+                user_cache[update.message.from_user.id]["longitude_drop"] = user_cache[update.message.from_user.id]["longitude_pick"]
+                user_cache[update.message.from_user.id]["latitude_drop"] = user_cache[update.message.from_user.id]["latitude_pick"]
+            update.message.reply_text(
+                "מחפש לך את הרכב... \U0001F50E"
+                "\n (נא המתן מספר שניות)"   
+                "\n."
+                , reply_markup=ReplyKeyboardRemove()
+            )
+            b1 = booking.get(name="car-rental/search",
+                            params={"drop_off_longitude": user_cache[update.message.from_user.id]["longitude_drop"], "currency": "ILS", "sort_by": 'recommended',
+                                    "drop_off_datetime":user_cache[update.message.from_user.id]["enddate_car"], "drop_off_latitude": user_cache[update.message.from_user.id]["latitude_drop"],
+                                    "from_country": 'it', "pick_up_longitude":user_cache[update.message.from_user.id]["longitude_pick"],
+                                    "locale": 'en-gb', "pick_up_datetime": user_cache[update.message.from_user.id]["startdate_car"], "pick_up_latitude":user_cache[update.message.from_user.id]["latitude_pick"]})
+            if b1["meta"]["response_code"]!=200 or b1['search_results']==[]:
+                update.message.reply_text(
+                    "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
+                )
+                return ConversationHandler.END
+            else:
+                update.message.reply_text(
+                    "איזה כיף מצאנו לך שני רכבים!",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+                update.message.reply_text(
+                    "הרכב המומלץ ביותר:\n\n"
+                    "שם הרכב:\n "
+                     f"{b1['search_results'][0]['vehicle_info']['v_name']}\n\n"  
+                    "מחיר בשקלים: \n" 
+                     f"{b1['search_results'][0]['pricing_info']['price']}\n\n"
+                     "שם חברת ההשכרה: \n"
+                    f"{b1['search_results'][0]['supplier_info']['name']}\n\n"
+                     "דירוג: \n"
+                    f"{b1['search_results'][0]['rating_info']['average']}\n\n"
+                    "כתובת איסוף: \n" 
+                     f"{b1['search_results'][0]['route_info']['pickup']['address']}\n\n"
+                    "כתובת החזרה: \n" 
+                    f"{b1['search_results'][0]['route_info']['dropoff']['address']}\n\n"
+                    "תמונה: \n"
+                    f"{b1['search_results'][0]['vehicle_info']['image_url']}\n\n"
+                    "\n."
+                )
+                b2 = booking.get(name="car-rental/search",
+                                 params={"drop_off_longitude": user_cache[update.message.from_user.id]["longitude_drop"],
+                                         "currency": "ILS", "sort_by": 'price_low_to_high',
+                                         "drop_off_datetime": user_cache[update.message.from_user.id]["enddate_car"],
+                                         "drop_off_latitude": user_cache[update.message.from_user.id]["latitude_drop"],
+                                         "from_country": 'it',
+                                         "pick_up_longitude": user_cache[update.message.from_user.id]["longitude_pick"],
+                                         "locale": 'en-gb',
+                                         "pick_up_datetime": user_cache[update.message.from_user.id]["startdate_car"],
+                                         "pick_up_latitude": user_cache[update.message.from_user.id]["latitude_pick"]})
+                update.message.reply_text(
+                    "הרכב הזול ביותר:\n\n"
+                    "שם הרכב:\n "
+                    f"{b2['search_results'][0]['vehicle_info']['v_name']}\n\n"
+                    "מחיר בשקלים: \n"
+                    f"{b2['search_results'][0]['pricing_info']['price']}\n\n"
+                    "שם חברת ההשכרה: \n"
+                    f"{b2['search_results'][0]['supplier_info']['name']}\n\n"
+                    "דירוג: \n"
+                    f"{b2['search_results'][0]['rating_info']['average']}\n\n"
+                    "כתובת איסוף: \n"
+                    f"{b2['search_results'][0]['route_info']['pickup']['address']}\n\n"
+                    "כתובת החזרה: \n"
+                    f"{b2['search_results'][0]['route_info']['dropoff']['address']}\n\n"
+                    "תמונה: \n"
+                    f"{b2['search_results'][0]['vehicle_info']['image_url']}\n\n"
+                    "\n."
+                )
+                update.message.reply_text(
+                    "את הרכבים ניתן למצוא באתר:\n"
+                    "https://bit.ly/rentcar_booking \n\n"
+                    "ביי, שתהיה לכם חופשה מהנה!\n"
+                    , reply_markup=ReplyKeyboardRemove()
+                )
+                return ConversationHandler.END
+        else:
+            update.message.reply_text(
+                    "נא הזן את מספר הימים בספרות לחץ על /TryAgain כדי להזין שוב",
+                    reply_markup=ReplyKeyboardRemove()
+            )
+            return FIND_CAR
 
     def cancel(self, update, context):
         """Cancels and ends the conversation."""
