@@ -72,7 +72,6 @@ class TelegramBot(object):
         categories = self.db.execute("select category_hebrew from rent_bot.airbnb_category;")
         for i in categories:
             key.append(i[0])
-        print(key)
         reply_keyboard = [key]
         update.message.reply_text(
             "כדי להכיר אותך אשמח לדעת מה הסגנון המועדף עליך?",
@@ -198,7 +197,6 @@ class TelegramBot(object):
         else:
             price_conv=int(c.convert(int(update.message.text), 'ILS', 'USD'))
             user_cache[update.message.from_user.id]["price"] = price_conv
-        print(user_cache[update.message.from_user.id])
         update.message.reply_text(
             "מחפש לך את הדירה... \U0001F50E"	
             "\n (נא המתן מספר שניות)"
@@ -209,8 +207,6 @@ class TelegramBot(object):
             cityq = self.db.execute(
                 "select Beach from rent_bot.countries where country_name='%s'" %user_cache[update.message.from_user.id]["country"])
             countryq = user_cache[update.message.from_user.id]["country"]
-            print(cityq[0][0])
-            print(countryq)
         elif user_cache[update.message.from_user.id]["category"]=="Amazing views":
                 cityq = self.db.execute(
                     "select Amazingviews from rent_bot.countries where country_name='%s'" %user_cache[update.message.from_user.id]["country"])
@@ -231,7 +227,7 @@ class TelegramBot(object):
 
         airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token="TOKEN")
         dec=airbnb.get(name="searchDestination", params={"query":cityq[0][0],"country":countryq})
-        if dec['message'] != "Success":
+        if dec['message'] != "Success" or dec['status']=="false":
             update.message.reply_text(
                 "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
             )
@@ -252,55 +248,62 @@ class TelegramBot(object):
                                    "checkin":user_cache[update.message.from_user.id]["startdate"],
                                    "checkout":user_cache[update.message.from_user.id]["enddate"],
                                    "priceMax": user_cache[update.message.from_user.id]["price"]})
-            update.message.reply_text(
-                "מצאתי לך מספר יעדים:", reply_markup=ReplyKeyboardRemove()
-            )
-            result = []
-            for i in a['data']:
-                if 'id' in i:
-                    result.append(f"{link}rooms/{i['id']}")
-                else:
-                    result.append("אין קישור")
-
-            price=[]
-            for i in a['data']:
-                if 'accessibilityLabel' in i:
-                    price.append(i['accessibilityLabel'])
-                else:
-                    if 'price' in i:
-                        price.append(i['price'])
-                    else:
-                        price.append("לא מוצג מחיר")
-            name=[]
-            for i in a['data']:
-                if 'listingName' in i:
-                    name.append(i['listingName'])
-                else:
-                   name.append("לא מוצג שם")
-
-
-            rate=[]
-            for i in a['data']:
-
-                if 'avgRatingLocalized' in i:
-                    if i['avgRatingLocalized']=="New":
-                        rate.append("לא קיים דירוג")
-                    else:
-                        rate.append(i['avgRatingLocalized'])
-                else:
-                   rate.append("לא קיים דירוג")
-            for i in range(3):
+            if a['message'] != "Success" or a['status'] == "false":
                 update.message.reply_text(
-                   f" שם: {name[i]} "
-                   f"\n מחיר: {price[i]}"
-                   f"\n דירוג: {rate[i]}"
-                   f"\n קישור: {result[i]}"
-                    "\n. ",
-                    reply_markup=ReplyKeyboardRemove()
+                    "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
                 )
-            update.message.reply_text(
-                "ביי, שתהיה לכם חופשה מהנה! \U00002708", reply_markup=ReplyKeyboardRemove()
-            )
+            else:
+                update.message.reply_text(
+                    "מצאתי לך מספר יעדים:", reply_markup=ReplyKeyboardRemove()
+                )
+                result = []
+                for i in a['data']:
+                    if 'id' in i:
+                        result.append(f"{link}rooms/{i['id']}")
+                    else:
+                        result.append("אין קישור")
+
+                price=[]
+                for i in a['data']:
+                    if 'accessibilityLabel' in i:
+                        price.append(i['accessibilityLabel'])
+                    else:
+                        if 'price' in i:
+                            price.append(i['price'])
+                        else:
+                            price.append("לא מוצג מחיר")
+                name=[]
+                for i in a['data']:
+                    if 'listingName' in i:
+                        name.append(i['listingName'])
+                    else:
+                       name.append("לא מוצג שם")
+                rate=[]
+                for i in a['data']:
+
+                    if 'avgRatingLocalized' in i:
+                        if i['avgRatingLocalized']=="New":
+                            rate.append("לא קיים דירוג")
+                        else:
+                            rate.append(i['avgRatingLocalized'])
+                    else:
+                       rate.append("לא קיים דירוג")
+                for i in range(3):
+                    update.message.reply_text(
+                        "שם:\n"
+                       f"{name[i]}\n\n"
+                        "מחיר: \n"
+                       f"{price[i]}\n\n"
+                        "דירוג: \n"
+                       f"{rate[i]}\n\n"
+                        "קישור: \n"
+                       f"{result[i]}\n\n"
+                        "\n. ",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                update.message.reply_text(
+                    "ביי, שתהיה לכם חופשה מהנה! \U00002708", reply_markup=ReplyKeyboardRemove()
+                )
 
         return ConversationHandler.END
 
@@ -342,17 +345,10 @@ class TelegramBot(object):
 
     def city_pick(self, update, context: CallbackContext):
         global choice
-        try:
-            en_country = self.db.execute(
+        en_country = self.db.execute(
                 "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
-            user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
-            choice = user_cache[update.message.from_user.id]["api_type"]
-        except:
-            db = DbManager(user="root", password="1234", host="localhost", database="rent_bot")
-            en_country = self.db.execute(
-                "select country_name from rent_bot.countries where country_name_hebrew='%s'" % country_pick)
-            user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
-            choice = user_cache[update.message.from_user.id]["api_type"]
+        user_cache[update.message.from_user.id]["country_pick"] = en_country[0][0]
+        choice = user_cache[update.message.from_user.id]["api_type"]
         keyboard = []
         cities = self.db.execute(
             "select city1_he,city2_he,city3_he, city4_he from rent_bot.cities_cars where country_name='%s'" %
@@ -474,7 +470,6 @@ class TelegramBot(object):
             user_cache[update.message.from_user.id]["enddate_car"] = enddate2
             booking = BookingApi(url="booking-com.p.rapidapi.com", token="TOKEN")
             a1=booking.get(name="car-rental/locations", params={"name":user_cache[update.message.from_user.id]["city_pick"], "locale": "en-gb"})
-
             user_cache[update.message.from_user.id]["longitude_pick"]=a1[0]['longitude']
             user_cache[update.message.from_user.id]["latitude_pick"] = a1[0]['latitude']
             if user_cache[update.message.from_user.id]["city_pick"]!= user_cache[update.message.from_user.id]["city_drop"]:
@@ -497,69 +492,124 @@ class TelegramBot(object):
                                     "drop_off_datetime":user_cache[update.message.from_user.id]["enddate_car"], "drop_off_latitude": user_cache[update.message.from_user.id]["latitude_drop"],
                                     "from_country": 'it', "pick_up_longitude":user_cache[update.message.from_user.id]["longitude_pick"],
                                     "locale": 'en-gb', "pick_up_datetime": user_cache[update.message.from_user.id]["startdate_car"], "pick_up_latitude":user_cache[update.message.from_user.id]["latitude_pick"]})
-            if b1["meta"]["response_code"]!=200 or b1['search_results']==[]:
+            try:
+                if b1["meta"]["response_code"]!=200 or b1['search_results']==[]:
+                    update.message.reply_text(
+                        "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
+                    )
+                    return ConversationHandler.END
+                else:
+                    update.message.reply_text(
+                        "איזה כיף מצאנו לך שני רכבים!",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    v_name1=b1['search_results'][0]['vehicle_info']['v_name']
+                    price1=b1['search_results'][0]['pricing_info']['price']
+                    sup_name1=b1['search_results'][0]['supplier_info']['name']
+                    rate1=b1['search_results'][0]['rating_info']['average']
+                    pickup1=b1['search_results'][0]['route_info']['pickup']['address']
+                    dropoff1=b1['search_results'][0]['route_info']['dropoff']['address']
+                    image1=b1['search_results'][0]['vehicle_info']['image_url']
+                    if (rate1 == 0):
+                        rate1 = "לא קיים דירוג"
+                    update.message.reply_text(
+                        "הרכב המומלץ ביותר:\n\n"
+                        "שם הרכב:\n "
+                         f"{v_name1}\n\n"  
+                        "מחיר בשקלים: \n" 
+                         f"{price1}\n\n"
+                         "שם חברת ההשכרה: \n"
+                        f"{sup_name1}\n\n"
+                         "דירוג: \n"
+                        f"{rate1}\n\n"
+                        "כתובת איסוף: \n" 
+                         f"{pickup1}\n\n"
+                        "כתובת החזרה: \n" 
+                        f"{dropoff1}\n\n"
+                        "תמונה: \n"
+                        f"{image1}\n\n"
+                        "\n."
+                    )
+                    b2 = booking.get(name="car-rental/search",
+                                     params={"drop_off_longitude": user_cache[update.message.from_user.id]["longitude_drop"],
+                                             "currency": "ILS", "sort_by": 'price_low_to_high',
+                                             "drop_off_datetime": user_cache[update.message.from_user.id]["enddate_car"],
+                                             "drop_off_latitude": user_cache[update.message.from_user.id]["latitude_drop"],
+                                             "from_country": 'it',
+                                             "pick_up_longitude": user_cache[update.message.from_user.id]["longitude_pick"],
+                                             "locale": 'en-gb',
+                                             "pick_up_datetime": user_cache[update.message.from_user.id]["startdate_car"],
+                                             "pick_up_latitude": user_cache[update.message.from_user.id]["latitude_pick"]})
+
+                    v_name2 = b2['search_results'][0]['vehicle_info']['v_name']
+                    price2 = b2['search_results'][0]['pricing_info']['price']
+                    sup_name2 = b2['search_results'][0]['supplier_info']['name']
+                    rate2 = b2['search_results'][0]['rating_info']['average']
+                    pickup2 = b2['search_results'][0]['route_info']['pickup']['address']
+                    dropoff2 = b2['search_results'][0]['route_info']['dropoff']['address']
+                    image2 = b2['search_results'][0]['vehicle_info']['image_url']
+                    if (rate2 == 0):
+                        rate2 = "לא קיים דירוג"
+                    if(v_name1==v_name2 and price1==price2 and sup_name1==sup_name2 and rate1==rate2):
+                        v_name2 = b1['search_results'][1]['vehicle_info']['v_name']
+                        price2 = b1['search_results'][1]['pricing_info']['price']
+                        sup_name2 = b1['search_results'][1]['supplier_info']['name']
+                        rate2 = b1['search_results'][1]['rating_info']['average']
+                        pickup2 = b1['search_results'][1]['route_info']['pickup']['address']
+                        dropoff2 = b1['search_results'][1]['route_info']['dropoff']['address']
+                        image2 = b1['search_results'][1]['vehicle_info']['image_url']
+                        if(rate2==0):
+                            rate2="לא קיים דירוג"
+                        update.message.reply_text(
+                        "רכב מומלץ נוסף:\n\n"
+                        "שם הרכב:\n "
+                        f"{v_name2}\n\n"
+                        "מחיר בשקלים: \n"
+                        f"{price2}\n\n"
+                        "שם חברת ההשכרה: \n"
+                        f"{sup_name2}\n\n"
+                        "דירוג: \n"
+                        f"{rate2}\n\n"
+                        "כתובת איסוף: \n"
+                        f"{pickup2}\n\n"
+                        "כתובת החזרה: \n"
+                        f"{dropoff2}\n\n"
+                        "תמונה: \n"
+                        f"{image2}\n\n"
+                        "\n."
+                    )
+                    else:
+                        update.message.reply_text(
+                            "הרכב הזול ביותר ביותר:\n\n"
+                            "שם הרכב:\n "
+                            f"{v_name2}\n\n"
+                            "מחיר בשקלים: \n"
+                            f"{price2}\n\n"
+                            "שם חברת ההשכרה: \n"
+                            f"{sup_name2}\n\n"
+                            "דירוג: \n"
+                            f"{rate2}\n\n"
+                            "כתובת איסוף: \n"
+                            f"{pickup2}\n\n"
+                            "כתובת החזרה: \n"
+                            f"{dropoff2}\n\n"
+                            "תמונה: \n"
+                            f"{image2}\n\n"
+                            "\n."
+                        )
+                    update.message.reply_text(
+                        "את הרכבים ניתן למצוא באתר:\n"
+                        "https://bit.ly/rentcar_booking \n\n"
+                        "ביי, שתהיה לכם חופשה מהנה!\n"
+                        , reply_markup=ReplyKeyboardRemove()
+                    )
+                    return ConversationHandler.END
+            except:
                 update.message.reply_text(
                     "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
                 )
                 return ConversationHandler.END
-            else:
-                update.message.reply_text(
-                    "איזה כיף מצאנו לך שני רכבים!",
-                    reply_markup=ReplyKeyboardRemove()
-                )
-                update.message.reply_text(
-                    "הרכב המומלץ ביותר:\n\n"
-                    "שם הרכב:\n "
-                     f"{b1['search_results'][0]['vehicle_info']['v_name']}\n\n"  
-                    "מחיר בשקלים: \n" 
-                     f"{b1['search_results'][0]['pricing_info']['price']}\n\n"
-                     "שם חברת ההשכרה: \n"
-                    f"{b1['search_results'][0]['supplier_info']['name']}\n\n"
-                     "דירוג: \n"
-                    f"{b1['search_results'][0]['rating_info']['average']}\n\n"
-                    "כתובת איסוף: \n" 
-                     f"{b1['search_results'][0]['route_info']['pickup']['address']}\n\n"
-                    "כתובת החזרה: \n" 
-                    f"{b1['search_results'][0]['route_info']['dropoff']['address']}\n\n"
-                    "תמונה: \n"
-                    f"{b1['search_results'][0]['vehicle_info']['image_url']}\n\n"
-                    "\n."
-                )
-                b2 = booking.get(name="car-rental/search",
-                                 params={"drop_off_longitude": user_cache[update.message.from_user.id]["longitude_drop"],
-                                         "currency": "ILS", "sort_by": 'price_low_to_high',
-                                         "drop_off_datetime": user_cache[update.message.from_user.id]["enddate_car"],
-                                         "drop_off_latitude": user_cache[update.message.from_user.id]["latitude_drop"],
-                                         "from_country": 'it',
-                                         "pick_up_longitude": user_cache[update.message.from_user.id]["longitude_pick"],
-                                         "locale": 'en-gb',
-                                         "pick_up_datetime": user_cache[update.message.from_user.id]["startdate_car"],
-                                         "pick_up_latitude": user_cache[update.message.from_user.id]["latitude_pick"]})
-                update.message.reply_text(
-                    "הרכב הזול ביותר:\n\n"
-                    "שם הרכב:\n "
-                    f"{b2['search_results'][0]['vehicle_info']['v_name']}\n\n"
-                    "מחיר בשקלים: \n"
-                    f"{b2['search_results'][0]['pricing_info']['price']}\n\n"
-                    "שם חברת ההשכרה: \n"
-                    f"{b2['search_results'][0]['supplier_info']['name']}\n\n"
-                    "דירוג: \n"
-                    f"{b2['search_results'][0]['rating_info']['average']}\n\n"
-                    "כתובת איסוף: \n"
-                    f"{b2['search_results'][0]['route_info']['pickup']['address']}\n\n"
-                    "כתובת החזרה: \n"
-                    f"{b2['search_results'][0]['route_info']['dropoff']['address']}\n\n"
-                    "תמונה: \n"
-                    f"{b2['search_results'][0]['vehicle_info']['image_url']}\n\n"
-                    "\n."
-                )
-                update.message.reply_text(
-                    "את הרכבים ניתן למצוא באתר:\n"
-                    "https://bit.ly/rentcar_booking \n\n"
-                    "ביי, שתהיה לכם חופשה מהנה!\n"
-                    , reply_markup=ReplyKeyboardRemove()
-                )
-                return ConversationHandler.END
+
         else:
             update.message.reply_text(
                     "נא הזן את מספר הימים בספרות לחץ על /TryAgain כדי להזין שוב",
