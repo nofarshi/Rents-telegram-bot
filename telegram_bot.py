@@ -1,5 +1,4 @@
 import datetime
-from db_manager import DbManager
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ContextTypes, ConversationHandler, filters, CallbackContext, CallbackQueryHandler
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, ParseMode, bot, InlineKeyboardButton, InlineKeyboardMarkup
 from currency_converter import CurrencyConverter
@@ -7,6 +6,7 @@ from air_bnb_api import AirBnbApi
 from booking_api import BookingApi
 import telegramcalendar
 import time
+import os
 
 user_cache = {}
 
@@ -225,7 +225,7 @@ class TelegramBot(object):
             countryq = user_cache[update.message.from_user.id]["country"]
         link="https://he.airbnb.com/"
 
-        airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token="TOKEN")
+        airbnb = AirBnbApi(url="airbnb19.p.rapidapi.com", token=os.environ["AIRBNB_TOKEN"])
         dec=airbnb.get(name="searchDestination", params={"query":cityq[0][0],"country":countryq})
         if dec['message'] != "Success" or dec['status']=="false":
             update.message.reply_text(
@@ -468,7 +468,7 @@ class TelegramBot(object):
             date2 = date1 + datetime.timedelta(days=int(update.message.text))
             enddate2 = date2.strftime("%Y-%m-%d 20:00:00")
             user_cache[update.message.from_user.id]["enddate_car"] = enddate2
-            booking = BookingApi(url="booking-com.p.rapidapi.com", token="TOKEN")
+            booking = BookingApi(url="booking-com.p.rapidapi.com", token=os.environ["BOOKING_TOKEN"])
             a1=booking.get(name="car-rental/locations", params={"name":user_cache[update.message.from_user.id]["city_pick"], "locale": "en-gb"})
             user_cache[update.message.from_user.id]["longitude_pick"]=a1[0]['longitude']
             user_cache[update.message.from_user.id]["latitude_pick"] = a1[0]['latitude']
