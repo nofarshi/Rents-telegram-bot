@@ -7,7 +7,7 @@ from booking_api import BookingApi
 import telegramcalendar
 import time
 import os
-#
+
 user_cache = {}
 
 CATEGORY, FIND_CAR, ADULTS, CHILDREN, COUNTRY, START_DATE, END_DATE, MAX_PRICE, FIND_A, DAYS, DROP, CITY_PICK, START_DATE2, DAYS2, CITY_DROP = range(15)
