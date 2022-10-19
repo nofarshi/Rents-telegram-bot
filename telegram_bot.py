@@ -229,7 +229,10 @@ class TelegramBot(object):
         dec=airbnb.get(name="searchDestination", params={"query":cityq[0][0],"country":countryq})
         if dec['message'] != "Success" or dec['status']=="false":
             update.message.reply_text(
-                "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
+                "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622"
+                "\n"
+                "לחיפוש נוסף לחצו על /start"
+                , reply_markup=ReplyKeyboardRemove()
             )
             update.message.reply_text(
                 dec['message'], reply_markup=ReplyKeyboardRemove()
@@ -237,10 +240,6 @@ class TelegramBot(object):
 
         else:
             time.sleep(3)
-            if cityq[0][0] == "Athens":
-                 id_city=dec['data'][1]['id']
-            else:
-                id_city=dec['data'][0]['id']
             a = airbnb.get(name="searchPropertyByPlace",
                            params={"id": dec['data'][0]['id'], "totalRecords": "3", "currency":"USD",
                                    "adults": user_cache[update.message.from_user.id]["adults"],
@@ -250,7 +249,10 @@ class TelegramBot(object):
                                    "priceMax": user_cache[update.message.from_user.id]["price"]})
             if a['message'] != "Success" or a['status'] == "false":
                 update.message.reply_text(
-                    "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
+                    "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622"
+                    "\n"
+                    "לחיפוש נוסף לחצו על /start"
+                    , reply_markup=ReplyKeyboardRemove()
                 )
             else:
                 update.message.reply_text(
@@ -302,7 +304,9 @@ class TelegramBot(object):
                         reply_markup=ReplyKeyboardRemove()
                     )
                 update.message.reply_text(
-                    "ביי, שתהיה לכם חופשה מהנה! \U00002708", reply_markup=ReplyKeyboardRemove()
+                    "ביי, שתהיה לכם חופשה מהנה! \U00002708"
+                    "\n\n"
+                    "לחיפוש נוסף לחצו על /start", reply_markup=ReplyKeyboardRemove()
                 )
 
         return ConversationHandler.END
@@ -495,7 +499,10 @@ class TelegramBot(object):
             try:
                 if b1["meta"]["response_code"]!=200 or b1['search_results']==[]:
                     update.message.reply_text(
-                        "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
+                        "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622"
+                        "\n"
+                        "לחיפוש נוסף לחצו על /start"
+                        , reply_markup=ReplyKeyboardRemove()
                     )
                     return ConversationHandler.END
                 else:
@@ -601,12 +608,17 @@ class TelegramBot(object):
                         "את הרכבים ניתן למצוא באתר:\n"
                         "https://bit.ly/rentcar_booking \n\n"
                         "ביי, שתהיה לכם חופשה מהנה!\n"
+                        "\n"
+                        "לחיפוש נוסף לחצו על /start"
                         , reply_markup=ReplyKeyboardRemove()
                     )
                     return ConversationHandler.END
             except:
                 update.message.reply_text(
-                    "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622", reply_markup=ReplyKeyboardRemove()
+                    "לא נמצאה חופשה לפרמטרים שנבחרו \U0001F622"
+                    "\n"
+                    "לחיפוש נוסף לחצו על /start"
+                    , reply_markup=ReplyKeyboardRemove()
                 )
                 return ConversationHandler.END
 
@@ -621,7 +633,10 @@ class TelegramBot(object):
         """Cancels and ends the conversation."""
 
         update.message.reply_text(
-            "ביי, שתהיה לכם חופשה מהנה!", reply_markup=ReplyKeyboardRemove()
+            "ביי, שתהיה לכם חופשה מהנה!"
+            "\n"
+            "לחיפוש נוסף לחצו על /start"
+            , reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
 
